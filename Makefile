@@ -2,8 +2,9 @@
 # Makefile - Solveur 2D Tout-Couplé Fortran & OpenMPI (FUGU-2D)
 # ==============================================================================
 
-FC      ?= mpifort
-FFLAGS  ?= -O3 -Wall -Wextra -fcheck=all -g -J$(MOD_DIR)
+# Forcer l'utilisation du wrapper OpenMPI (évite le f77 par défaut de GNU Make)
+FC      := mpifort
+FFLAGS  := -O3 -Wall -Wextra -fcheck=all -g -J$(MOD_DIR)
 
 SRC_DIR := src
 TEST_DIR:= tests

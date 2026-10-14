@@ -2,22 +2,23 @@
 # Makefile - Solveur 2D Tout-Couplé Fortran & OpenMPI (FUGU-2D)
 # ==============================================================================
 
-# Forcer l'utilisation du wrapper OpenMPI (évite le f77 par défaut de GNU Make)
-FC      := mpifort
-FFLAGS  := -O3 -Wall -Wextra -fcheck=all -g -J$(MOD_DIR)
+# Répertoires (définis en premier pour garantir l'expansion immédiate de FFLAGS)
+SRC_DIR  := src
+TEST_DIR := tests
+OBJ_DIR  := build
+MOD_DIR  := mod
+BIN_DIR  := bin
 
-SRC_DIR := src
-TEST_DIR:= tests
-OBJ_DIR := build
-MOD_DIR := mod
-BIN_DIR := bin
+# Compilateur et drapeaux
+FC       := mpifort
+FFLAGS   := -O3 -Wall -Wextra -fcheck=all -g -J$(MOD_DIR) -I$(MOD_DIR)
 
 # Modules principaux
-SRCS    := $(SRC_DIR)/mod_precision.f90 \
-           $(SRC_DIR)/mod_params.f90 \
-           $(SRC_DIR)/mod_mpi.f90
+SRCS     := $(SRC_DIR)/mod_precision.f90 \
+            $(SRC_DIR)/mod_params.f90 \
+            $(SRC_DIR)/mod_mpi.f90
 
-OBJS    := $(patsubst $(SRC_DIR)/%.f90,$(OBJ_DIR)/%.o,$(SRCS))
+OBJS     := $(patsubst $(SRC_DIR)/%.f90,$(OBJ_DIR)/%.o,$(SRCS))
 
 # Cibles principales
 all: directories $(BIN_DIR)/test_halo_exchange

@@ -1,8 +1,8 @@
 program test_halo_exchange
   use mod_precision, only: dp, ip, zero, one, pi
   use mod_params,    only: Nx_global, Ny_global, Lx, Ly
-  use mod_mpi,       only: my_rank, n_procs, dims, coords, nx_loc, ny_loc, &
-                           i_start, i_end, j_start, j_end, dx_grid, dy_grid, &
+  use mod_mpi,       only: my_rank, n_procs, dims, nx_loc, ny_loc, &
+                           i_start, j_start, dx_grid, dy_grid, &
                            comm_cart, mpi_init_env, mpi_finalize_env, &
                            mpi_setup_cartesian_mesh, mpi_exchange_halos_scalar
   use mpi

@@ -6,3 +6,4 @@ build/
 *.vtr
 *.vtk
 .DS_Store
+.Rhistory

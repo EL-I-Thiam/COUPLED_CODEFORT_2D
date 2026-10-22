@@ -47,8 +47,9 @@ contains
   ! -------------------------------------------------------------------------
   subroutine mpi_finalize_env()
     integer(ip) :: ierr
-    if (comm_cart /= MPI_COMM_NULL) then
+    if (comm_cart /= MPI_COMM_NULL .and. comm_cart /= MPI_COMM_WORLD) then
       call MPI_Comm_free(comm_cart, ierr)
+      comm_cart = MPI_COMM_NULL
     end if
     call MPI_Finalize(ierr)
   end subroutine mpi_finalize_env

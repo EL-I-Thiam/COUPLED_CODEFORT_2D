@@ -264,11 +264,14 @@ contains
     real(dp) :: inv_dx2, inv_dy2, diag_val, off_diag
     real(dp) :: c_E, c_W, c_N, c_S
     real(dp) :: omega_relax
-    integer(ip) :: n_sweeps, sweep, i, j
+    integer(ip) :: n_sweeps, sweep, i, j, i_u_max
 
     n_sweeps = 5
     if (present(n_sweeps_in)) n_sweeps = n_sweeps_in
     omega_relax = 0.8_dp
+
+    i_u_max = nx
+    if (.not. periods(1) .and. coords(1) == dims(1)-1) i_u_max = nx - 1
 
     inv_dx2 = one / (dx_grid * dx_grid)
     inv_dy2 = one / (dy_grid * dy_grid)
@@ -278,7 +281,7 @@ contains
       u_old = u_sol
 
       do j = 1, ny
-        do i = 1, nx-1
+        do i = 1, i_u_max
           ! Coefficients diagonaux et hors-diagonaux de la diffusion
           c_E = kappa(i+1, j) * inv_dx2
           c_W = kappa(i, j)   * inv_dx2
@@ -321,11 +324,14 @@ contains
     real(dp) :: inv_dx2, inv_dy2, diag_val, off_diag
     real(dp) :: c_E, c_W, c_N, c_S
     real(dp) :: omega_relax
-    integer(ip) :: n_sweeps, sweep, i, j
+    integer(ip) :: n_sweeps, sweep, i, j, j_v_max
 
     n_sweeps = 5
     if (present(n_sweeps_in)) n_sweeps = n_sweeps_in
     omega_relax = 0.8_dp
+
+    j_v_max = ny
+    if (.not. periods(2) .and. coords(2) == dims(2)-1) j_v_max = ny - 1
 
     inv_dx2 = one / (dx_grid * dx_grid)
     inv_dy2 = one / (dy_grid * dy_grid)
@@ -334,7 +340,7 @@ contains
       call mpi_exchange_halos_v(v_sol, nx, ny, nh)
       v_old = v_sol
 
-      do j = 1, ny-1
+      do j = 1, j_v_max
         do i = 1, nx
           c_E = (zeta(i, j)   - eta(i, j))   * inv_dx2
           c_W = (zeta(i-1, j) - eta(i-1, j)) * inv_dx2

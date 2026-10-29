@@ -176,7 +176,7 @@ contains
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(out) :: adv_u
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(out) :: adv_v
 
-    integer(ip) :: i, j
+    integer(ip) :: i, j, i_u_max, j_v_max
     real(dp) :: inv_dx, inv_dy
     real(dp) :: mdot_E, mdot_W, mdot_N, mdot_S
     real(dp) :: u_E, u_W, u_N, u_S
@@ -185,12 +185,18 @@ contains
     inv_dx = one / dx_grid
     inv_dy = one / dy_grid
 
+    i_u_max = nx
+    if (.not. periods(1) .and. coords(1) == dims(1) - 1) i_u_max = nx - 1
+
+    j_v_max = ny
+    if (.not. periods(2) .and. coords(2) == dims(2) - 1) j_v_max = ny - 1
+
     adv_u = zero
     adv_v = zero
 
     ! Advection de la composante u (sur volume de contrôle centré sur la face u)
     do j = 1, ny
-      do i = 1, nx-1
+      do i = 1, i_u_max
         ! Flux Est au centre de la cellule (i+1, j)
         mdot_E = rho_c(i+1, j) * half * (u_adv(i, j) + u_adv(i+1, j))
         u_E    = half * (u_vel(i, j) + u_vel(i+1, j))
@@ -213,7 +219,7 @@ contains
     end do
 
     ! Advection de la composante v (sur volume de contrôle centré sur la face v)
-    do j = 1, ny-1
+    do j = 1, j_v_max
       do i = 1, nx
         ! Flux Est au sommet (i, j)
         mdot_E = half * (rho_u(i, j) + rho_u(i, j+1)) * half * (u_adv(i, j) + u_adv(i, j+1))
@@ -351,10 +357,16 @@ contains
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh) :: visc_u, adv_u, grad_p_u
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh) :: visc_v, adv_v, grad_p_v
     logical :: with_adv
-    integer(ip) :: i, j
+    integer(ip) :: i, j, i_u_max, j_v_max
 
     with_adv = .true.
     if (present(include_advection)) with_adv = include_advection
+
+    i_u_max = nx
+    if (.not. periods(1) .and. coords(1) == dims(1) - 1) i_u_max = nx - 1
+
+    j_v_max = ny
+    if (.not. periods(2) .and. coords(2) == dims(2) - 1) j_v_max = ny - 1
 
     ! a) Échanges de halos pour assurer la cohérence des cellules fantômes
     call mpi_exchange_halos_u(X_u, nx, ny, nh)
@@ -379,53 +391,31 @@ contains
     !    Y_u = (rho_u / dt) * X_u + Adv_u - div(T)_u + Grad_x(X_p)
     Y_u = zero
     do j = 1, ny
-      do i = 1, nx-1
+      do i = 1, i_u_max
         Y_u(i, j) = (rho_u(i, j) / dt_step) * X_u(i, j) + adv_u(i, j) + &
                     visc_u(i, j) + grad_p_u(i, j)
       end do
-      if (periods(1)) then
-        Y_u(0, j)  = (rho_u(0, j) / dt_step) * X_u(0, j) + adv_u(0, j) + visc_u(0, j) + grad_p_u(0, j)
-        Y_u(nx, j) = (rho_u(nx, j) / dt_step) * X_u(nx, j) + adv_u(nx, j) + visc_u(nx, j) + grad_p_u(nx, j)
-      else
-        if (coords(1) == 0) then
-          Y_u(0, j) = X_u(0, j)
-        else
-          Y_u(0, j) = (rho_u(0, j) / dt_step) * X_u(0, j) + adv_u(0, j) + visc_u(0, j) + grad_p_u(0, j)
-        end if
-        if (coords(1) == dims(1) - 1) then
-          Y_u(nx, j) = X_u(nx, j)
-        else
-          Y_u(nx, j) = (rho_u(nx, j) / dt_step) * X_u(nx, j) + adv_u(nx, j) + visc_u(nx, j) + grad_p_u(nx, j)
-        end if
+      if (.not. periods(1)) then
+        if (coords(1) == 0) Y_u(0, j) = X_u(0, j)
+        if (coords(1) == dims(1) - 1) Y_u(nx, j) = X_u(nx, j)
       end if
     end do
 
     ! f) Assemblage du bloc de quantite de mouvement en v
     !    Y_v = (rho_v / dt) * X_v + Adv_v - div(T)_v + Grad_y(X_p)
     Y_v = zero
-    do j = 1, ny-1
+    do j = 1, j_v_max
       do i = 1, nx
         Y_v(i, j) = (rho_v(i, j) / dt_step) * X_v(i, j) + adv_v(i, j) + &
                     visc_v(i, j) + grad_p_v(i, j)
       end do
     end do
-    do i = 1, nx
-      if (periods(2)) then
-        Y_v(i, 0)  = (rho_v(i, 0) / dt_step) * X_v(i, 0) + adv_v(i, 0) + visc_v(i, 0) + grad_p_v(i, 0)
-        Y_v(i, ny) = (rho_v(i, ny) / dt_step) * X_v(i, ny) + adv_v(i, ny) + visc_v(i, ny) + grad_p_v(i, ny)
-      else
-        if (coords(2) == 0) then
-          Y_v(i, 0) = X_v(i, 0)
-        else
-          Y_v(i, 0) = (rho_v(i, 0) / dt_step) * X_v(i, 0) + adv_v(i, 0) + visc_v(i, 0) + grad_p_v(i, 0)
-        end if
-        if (coords(2) == dims(2) - 1) then
-          Y_v(i, ny) = X_v(i, ny)
-        else
-          Y_v(i, ny) = (rho_v(i, ny) / dt_step) * X_v(i, ny) + adv_v(i, ny) + visc_v(i, ny) + grad_p_v(i, ny)
-        end if
-      end if
-    end do
+    if (.not. periods(2)) then
+      do i = 1, nx
+        if (coords(2) == 0) Y_v(i, 0) = X_v(i, 0)
+        if (coords(2) == dims(2) - 1) Y_v(i, ny) = X_v(i, ny)
+      end do
+    end if
 
     ! g) Assemblage du bloc d'incompressibilite (Divergence B_u X_u + B_v X_v)
     call op_divergence(X_u, X_v, Y_p, nx, ny, nh)

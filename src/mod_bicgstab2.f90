@@ -10,6 +10,7 @@
 module mod_bicgstab2
   use mod_precision,  only: dp, ip, zero, one, two
   use mod_mpi,        only: dx_grid, dy_grid, comm_cart, my_rank, &
+                            periods, coords, dims, &
                             mpi_exchange_halos_scalar, mpi_exchange_halos_u, &
                             mpi_exchange_halos_v
   use mod_operators,  only: matvec_coupled, apply_velocity_bcs
@@ -35,20 +36,26 @@ contains
     real(dp), dimension(1-nh:nx+nh, 1-nh:ny+nh), intent(in) :: p1, p2
     real(dp) :: dot_val, loc_dot
     real(dp) :: vol
-    integer(ip) :: i, j, ierr
+    integer(ip) :: i, j, i_u_max, j_v_max, ierr
 
     vol = dx_grid * dy_grid
     loc_dot = zero
 
-    ! Faces u internes et frontières physiques
+    i_u_max = nx
+    if (.not. periods(1) .and. coords(1) == dims(1) - 1) i_u_max = nx - 1
+
+    j_v_max = ny
+    if (.not. periods(2) .and. coords(2) == dims(2) - 1) j_v_max = ny - 1
+
+    ! Faces u internes possédées
     do j = 1, ny
-      do i = 0, nx
+      do i = 1, i_u_max
         loc_dot = loc_dot + u1(i, j) * u2(i, j) * vol
       end do
     end do
 
-    ! Faces v internes et frontières physiques
-    do j = 0, ny
+    ! Faces v internes possédées
+    do j = 1, j_v_max
       do i = 1, nx
         loc_dot = loc_dot + v1(i, j) * v2(i, j) * vol
       end do

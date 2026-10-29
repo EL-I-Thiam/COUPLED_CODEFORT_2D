@@ -32,7 +32,7 @@ program test_lid_driven_cavity
   real(dp) :: div_max_loc, div_max_glob
   real(dp) :: res_bicg
   integer(ip) :: iter_bicg, step, max_steps
-  integer(ip) :: i_loc, j_loc, i_glob, j_glob, ierr
+  integer(ip) :: i_loc, j_loc, i_glob, j_glob, ierr, i_u_max, j_v_max
 
   ! Profils de vitesse pour comparaison avec Botella & Peyret (1998)
   real(dp) :: u_min_loc, u_min_glob, y_at_umin
@@ -110,37 +110,37 @@ program test_lid_driven_cavity
     u_old = u_vel
     v_old = v_vel
 
+    i_u_max = nx_loc
+    if (coords(1) == dims(1) - 1) i_u_max = nx_loc - 1
+
+    j_v_max = ny_loc
+    if (coords(2) == dims(2) - 1) j_v_max = ny_loc - 1
+
     ! Construction du second membre monolithique :
     ! B_u = (rho_u / dt) * u^n
     ! B_v = (rho_v / dt) * v^n
     ! B_p = 0
     B_u = zero
     do j_loc = 1, ny_loc
-      do i_loc = 1, nx_loc-1
+      do i_loc = 1, i_u_max
         B_u(i_loc, j_loc) = (rho_u(i_loc, j_loc) / dt_val) * u_old(i_loc, j_loc)
       end do
-      B_u(0, j_loc) = zero
-      B_u(nx_loc, j_loc) = zero
     end do
 
     ! Terme inhomogène de paroi supérieure entraînée (y = Ly)
     ! Provient de la discrétisation de -div(T)_u à la paroi mobile u_lid
     if (coords(2) == dims(2) - 1) then
-      do i_loc = 1, nx_loc-1
+      do i_loc = 1, i_u_max
         B_u(i_loc, ny_loc) = B_u(i_loc, ny_loc) + &
           (two * (zeta(i_loc, ny_loc) - eta(i_loc, ny_loc)) / (dy_grid * dy_grid)) * u_lid
       end do
     end if
 
     B_v = zero
-    do j_loc = 1, ny_loc-1
+    do j_loc = 1, j_v_max
       do i_loc = 1, nx_loc
         B_v(i_loc, j_loc) = (rho_v(i_loc, j_loc) / dt_val) * v_old(i_loc, j_loc)
       end do
-    end do
-    do i_loc = 1, nx_loc
-      B_v(i_loc, 0) = zero
-      B_v(i_loc, ny_loc) = zero
     end do
 
     B_p = zero
@@ -185,34 +185,37 @@ program test_lid_driven_cavity
   call MPI_Allreduce(div_max_loc, div_max_glob, 1, MPI_DOUBLE_PRECISION, MPI_MAX, comm_cart, ierr)
 
   ! 6. Extraction des grandeurs caractéristiques de l'écoulement
+  ! Synchronisation des cellules fantômes avant extraction
+  call mpi_exchange_halos_u(u_vel, nx_loc, ny_loc, nh)
+  call mpi_exchange_halos_v(v_vel, nx_loc, ny_loc, nh)
+
   ! Profil u(y) le long de la ligne médiane x = 0.5
-  u_min_loc  = zero
+  u_min_loc  = 1.0e10_dp
   y_at_umin  = zero
-  do j_loc = 1, ny_loc
-    j_glob = j_start + j_loc - 1
-    y_pos  = (real(j_glob, dp) - half) * dy_grid
-    ! Maille la plus proche de x = 0.5
-    i_glob = Nx_global / 2
-    if (i_glob >= i_start .and. i_glob <= i_start + nx_loc - 1) then
-      i_loc = i_glob - i_start + 1
+  i_glob = Nx_global / 2
+  if (i_glob >= i_start .and. i_glob <= i_start + nx_loc - 1) then
+    i_loc = i_glob - i_start + 1
+    do j_loc = 1, ny_loc
+      j_glob = j_start + j_loc - 1
+      y_pos  = (real(j_glob, dp) - half) * dy_grid
       if (u_vel(i_loc, j_loc) < u_min_loc) then
         u_min_loc = u_vel(i_loc, j_loc)
         y_at_umin = y_pos
       end if
-    end if
-  end do
+    end do
+  end if
 
   ! Profil v(x) le long de la ligne médiane y = 0.5
-  v_min_loc = zero
-  v_max_loc = zero
+  v_min_loc =  1.0e10_dp
+  v_max_loc = -1.0e10_dp
   x_at_vmin = zero
   x_at_vmax = zero
-  do i_loc = 1, nx_loc
-    i_glob = i_start + i_loc - 1
-    x_pos  = (real(i_glob, dp) - half) * dx_grid
-    j_glob = Ny_global / 2
-    if (j_glob >= j_start .and. j_glob <= j_start + ny_loc - 1) then
-      j_loc = j_glob - j_start + 1
+  j_glob = Ny_global / 2
+  if (j_glob >= j_start .and. j_glob <= j_start + ny_loc - 1) then
+    j_loc = j_glob - j_start + 1
+    do i_loc = 1, nx_loc
+      i_glob = i_start + i_loc - 1
+      x_pos  = (real(i_glob, dp) - half) * dx_grid
       if (v_vel(i_loc, j_loc) < v_min_loc) then
         v_min_loc = v_vel(i_loc, j_loc)
         x_at_vmin = x_pos
@@ -221,8 +224,8 @@ program test_lid_driven_cavity
         v_max_loc = v_vel(i_loc, j_loc)
         x_at_vmax = x_pos
       end if
-    end if
-  end do
+    end do
+  end if
 
   call MPI_Allreduce(u_min_loc, u_min_glob, 1, MPI_DOUBLE_PRECISION, MPI_MIN, comm_cart, ierr)
   call MPI_Allreduce(v_min_loc, v_min_glob, 1, MPI_DOUBLE_PRECISION, MPI_MIN, comm_cart, ierr)

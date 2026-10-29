@@ -3,6 +3,9 @@
 # Compatible macOS (Apple Silicon / Homebrew) et Linux (Ubuntu / Debian)
 # ==============================================================================
 
+# Assurer que PATH contient les binaires Homebrew sur macOS
+export PATH := /opt/homebrew/bin:/usr/local/bin:$(PATH)
+
 # Répertoires
 SRC_DIR  := src
 TEST_DIR := tests
@@ -23,12 +26,14 @@ SRCS     := $(SRC_DIR)/mod_precision.f90 \
             $(SRC_DIR)/mod_operators.f90 \
             $(SRC_DIR)/mod_subsolvers.f90 \
             $(SRC_DIR)/mod_pcd_precond.f90 \
-            $(SRC_DIR)/mod_bicgstab2.f90
+            $(SRC_DIR)/mod_bicgstab2.f90 \
+            $(SRC_DIR)/mod_vof.f90 \
+            $(SRC_DIR)/mod_surface_tension.f90
 
 OBJS     := $(patsubst $(SRC_DIR)/%.f90,$(OBJ_DIR)/%.o,$(SRCS))
 
 # Cibles principales
-all: directories $(BIN_DIR)/test_halo_exchange $(BIN_DIR)/test_operators $(BIN_DIR)/test_lid_driven_cavity
+all: directories $(BIN_DIR)/test_halo_exchange $(BIN_DIR)/test_operators $(BIN_DIR)/test_lid_driven_cavity $(BIN_DIR)/test_static_droplet
 
 directories:
 	@mkdir -p $(OBJ_DIR) $(MOD_DIR) $(BIN_DIR)
@@ -58,6 +63,12 @@ $(OBJ_DIR)/mod_pcd_precond.o: $(SRC_DIR)/mod_pcd_precond.f90 $(OBJ_DIR)/mod_prec
 $(OBJ_DIR)/mod_bicgstab2.o: $(SRC_DIR)/mod_bicgstab2.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o $(OBJ_DIR)/mod_operators.o $(OBJ_DIR)/mod_pcd_precond.o | directories
 	$(FC) $(FFLAGS) -c $< -o $@
 
+$(OBJ_DIR)/mod_vof.o: $(SRC_DIR)/mod_vof.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_mpi.o | directories
+	$(FC) $(FFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/mod_surface_tension.o: $(SRC_DIR)/mod_surface_tension.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o | directories
+	$(FC) $(FFLAGS) -c $< -o $@
+
 # Exécutables de tests
 $(BIN_DIR)/test_halo_exchange: $(TEST_DIR)/test_halo_exchange.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o | directories
 	$(FC) $(FFLAGS) $< $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o -o $@
@@ -65,8 +76,11 @@ $(BIN_DIR)/test_halo_exchange: $(TEST_DIR)/test_halo_exchange.f90 $(OBJ_DIR)/mod
 $(BIN_DIR)/test_operators: $(TEST_DIR)/test_operators.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o $(OBJ_DIR)/mod_viscosity.o $(OBJ_DIR)/mod_operators.o | directories
 	$(FC) $(FFLAGS) $< $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o $(OBJ_DIR)/mod_viscosity.o $(OBJ_DIR)/mod_operators.o -o $@
 
-$(BIN_DIR)/test_lid_driven_cavity: $(TEST_DIR)/test_lid_driven_cavity.f90 $(OBJS) | directories
-	$(FC) $(FFLAGS) $< $(OBJS) -o $@
+$(BIN_DIR)/test_lid_driven_cavity: $(TEST_DIR)/test_lid_driven_cavity.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o $(OBJ_DIR)/mod_viscosity.o $(OBJ_DIR)/mod_operators.o $(OBJ_DIR)/mod_subsolvers.o $(OBJ_DIR)/mod_pcd_precond.o $(OBJ_DIR)/mod_bicgstab2.o | directories
+	$(FC) $(FFLAGS) $< $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o $(OBJ_DIR)/mod_viscosity.o $(OBJ_DIR)/mod_operators.o $(OBJ_DIR)/mod_subsolvers.o $(OBJ_DIR)/mod_pcd_precond.o $(OBJ_DIR)/mod_bicgstab2.o -o $@
+
+$(BIN_DIR)/test_static_droplet: $(TEST_DIR)/test_static_droplet.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o $(OBJ_DIR)/mod_viscosity.o $(OBJ_DIR)/mod_vof.o $(OBJ_DIR)/mod_surface_tension.o | directories
+	$(FC) $(FFLAGS) $< $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o $(OBJ_DIR)/mod_viscosity.o $(OBJ_DIR)/mod_vof.o $(OBJ_DIR)/mod_surface_tension.o -o $@
 
 # Exécution des tests unitaires
 test_mpi: $(BIN_DIR)/test_halo_exchange
@@ -81,9 +95,13 @@ test_cavity: $(BIN_DIR)/test_lid_driven_cavity
 	@echo "Lancement du benchmark cavité entraînée (solveur tout-couplé) sur 4 cœurs..."
 	$(MPIRUN) -np 4 ./$(BIN_DIR)/test_lid_driven_cavity
 
-tests: test_mpi test_operators test_cavity
+test_droplet: $(BIN_DIR)/test_static_droplet
+	@echo "Lancement du benchmark goutte statique (VOF/CSF) sur 4 cœurs..."
+	$(MPIRUN) -np 4 ./$(BIN_DIR)/test_static_droplet
+
+tests: test_mpi test_operators test_cavity test_droplet
 
 clean:
 	rm -rf $(OBJ_DIR) $(MOD_DIR) $(BIN_DIR)
 
-.PHONY: all directories test_mpi test_operators test_cavity tests clean
+.PHONY: all directories test_mpi test_operators test_cavity test_droplet tests clean

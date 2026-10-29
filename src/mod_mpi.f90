@@ -167,12 +167,12 @@ contains
     allocate(s_buf_x(nh, 1-nh:ny+nh), r_buf_x(nh, 1-nh:ny+nh))
     allocate(s_buf_y(0-nh:nx+nh, nh), r_buf_y(0-nh:nx+nh, nh))
 
-    ! Envoi vers l'Est / Réception de l'Ouest
-    s_buf_x = u_vel(nx-nh:nx-1, :)
+    ! Envoi vers l'Est / Réception de l'Ouest (inclus la face frontière locale nx reçue en 0)
+    s_buf_x = u_vel(nx-nh+1:nx, :)
     call MPI_Sendrecv(s_buf_x, nh * (ny + 2*nh), MPI_DOUBLE_PRECISION, nbr_east, 301, &
                       r_buf_x, nh * (ny + 2*nh), MPI_DOUBLE_PRECISION, nbr_west, 301, &
                       comm_cart, status_arr, ierr)
-    if (nbr_west /= MPI_PROC_NULL) u_vel(-nh:-1, :) = r_buf_x
+    if (nbr_west /= MPI_PROC_NULL) u_vel(1-nh:0, :) = r_buf_x
 
     ! Envoi vers l'Ouest / Réception de l'Est
     s_buf_x = u_vel(1:nh, :)
@@ -227,12 +227,12 @@ contains
                       comm_cart, status_arr, ierr)
     if (nbr_east /= MPI_PROC_NULL) v_vel(nx+1:nx+nh, :) = r_buf_x
 
-    ! Envoi vers le Nord / Réception du Sud
-    s_buf_y = v_vel(:, ny-nh:ny-1)
+    ! Envoi vers le Nord / Réception du Sud (inclus la face frontière locale ny reçue en 0)
+    s_buf_y = v_vel(:, ny-nh+1:ny)
     call MPI_Sendrecv(s_buf_y, (nx + 2*nh) * nh, MPI_DOUBLE_PRECISION, nbr_north, 601, &
                       r_buf_y, (nx + 2*nh) * nh, MPI_DOUBLE_PRECISION, nbr_south, 601, &
                       comm_cart, status_arr, ierr)
-    if (nbr_south /= MPI_PROC_NULL) v_vel(:, -nh:-1) = r_buf_y
+    if (nbr_south /= MPI_PROC_NULL) v_vel(:, 1-nh:0) = r_buf_y
 
     ! Envoi vers le Sud / Réception du Nord
     s_buf_y = v_vel(:, 1:nh)

@@ -28,12 +28,20 @@ SRCS     := $(SRC_DIR)/mod_precision.f90 \
             $(SRC_DIR)/mod_pcd_precond.f90 \
             $(SRC_DIR)/mod_bicgstab2.f90 \
             $(SRC_DIR)/mod_vof.f90 \
-            $(SRC_DIR)/mod_surface_tension.f90
+            $(SRC_DIR)/mod_surface_tension.f90 \
+            $(SRC_DIR)/mod_io.f90 \
+            $(SRC_DIR)/mod_solver_coupled.f90
 
 OBJS     := $(patsubst $(SRC_DIR)/%.f90,$(OBJ_DIR)/%.o,$(SRCS))
 
 # Cibles principales
-all: directories $(BIN_DIR)/test_halo_exchange $(BIN_DIR)/test_operators $(BIN_DIR)/test_lid_driven_cavity $(BIN_DIR)/test_static_droplet
+all: directories \
+     $(BIN_DIR)/test_halo_exchange \
+     $(BIN_DIR)/test_operators \
+     $(BIN_DIR)/test_lid_driven_cavity \
+     $(BIN_DIR)/test_static_droplet \
+     $(BIN_DIR)/test_laplace_coupled \
+     $(BIN_DIR)/test_rising_bubble
 
 directories:
 	@mkdir -p $(OBJ_DIR) $(MOD_DIR) $(BIN_DIR)
@@ -69,6 +77,16 @@ $(OBJ_DIR)/mod_vof.o: $(SRC_DIR)/mod_vof.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DI
 $(OBJ_DIR)/mod_surface_tension.o: $(SRC_DIR)/mod_surface_tension.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o | directories
 	$(FC) $(FFLAGS) -c $< -o $@
 
+$(OBJ_DIR)/mod_io.o: $(SRC_DIR)/mod_io.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o | directories
+	$(FC) $(FFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/mod_solver_coupled.o: $(SRC_DIR)/mod_solver_coupled.f90 \
+                                 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o \
+                                 $(OBJ_DIR)/mod_viscosity.o $(OBJ_DIR)/mod_operators.o \
+                                 $(OBJ_DIR)/mod_vof.o $(OBJ_DIR)/mod_surface_tension.o \
+                                 $(OBJ_DIR)/mod_bicgstab2.o | directories
+	$(FC) $(FFLAGS) -c $< -o $@
+
 # Exécutables de tests
 $(BIN_DIR)/test_halo_exchange: $(TEST_DIR)/test_halo_exchange.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o | directories
 	$(FC) $(FFLAGS) $< $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o -o $@
@@ -81,6 +99,12 @@ $(BIN_DIR)/test_lid_driven_cavity: $(TEST_DIR)/test_lid_driven_cavity.f90 $(OBJ_
 
 $(BIN_DIR)/test_static_droplet: $(TEST_DIR)/test_static_droplet.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o $(OBJ_DIR)/mod_viscosity.o $(OBJ_DIR)/mod_vof.o $(OBJ_DIR)/mod_surface_tension.o | directories
 	$(FC) $(FFLAGS) $< $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o $(OBJ_DIR)/mod_viscosity.o $(OBJ_DIR)/mod_vof.o $(OBJ_DIR)/mod_surface_tension.o -o $@
+
+$(BIN_DIR)/test_laplace_coupled: $(TEST_DIR)/test_laplace_coupled.f90 $(OBJS) | directories
+	$(FC) $(FFLAGS) $< $(OBJS) -o $@
+
+$(BIN_DIR)/test_rising_bubble: $(TEST_DIR)/test_rising_bubble.f90 $(OBJS) | directories
+	$(FC) $(FFLAGS) $< $(OBJS) -o $@
 
 # Exécution des tests unitaires
 test_mpi: $(BIN_DIR)/test_halo_exchange
@@ -99,9 +123,17 @@ test_droplet: $(BIN_DIR)/test_static_droplet
 	@echo "Lancement du benchmark goutte statique (VOF/CSF) sur 4 cœurs..."
 	$(MPIRUN) -np 4 ./$(BIN_DIR)/test_static_droplet
 
-tests: test_mpi test_operators test_cavity test_droplet
+test_laplace: $(BIN_DIR)/test_laplace_coupled
+	@echo "Lancement du benchmark goutte statique couplée (NS+VOF+CSF) sur 4 cœurs..."
+	$(MPIRUN) -np 4 ./$(BIN_DIR)/test_laplace_coupled
+
+test_bubble: $(BIN_DIR)/test_rising_bubble
+	@echo "Lancement du benchmark bulle ascendante 2D sur 4 cœurs..."
+	$(MPIRUN) -np 4 ./$(BIN_DIR)/test_rising_bubble
+
+tests: test_mpi test_operators test_cavity test_droplet test_laplace test_bubble
 
 clean:
-	rm -rf $(OBJ_DIR) $(MOD_DIR) $(BIN_DIR)
+	rm -rf $(OBJ_DIR) $(MOD_DIR) $(BIN_DIR) output
 
-.PHONY: all directories test_mpi test_operators test_cavity test_droplet tests clean
+.PHONY: all directories test_mpi test_operators test_cavity test_droplet test_laplace test_bubble tests clean

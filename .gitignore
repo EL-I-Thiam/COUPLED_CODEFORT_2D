@@ -3,6 +3,8 @@
 *.a
 bin/
 build/
+mod/
+output/
 *.vtr
 *.vtk
 .DS_Store

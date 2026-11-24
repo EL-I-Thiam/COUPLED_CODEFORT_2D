@@ -13,7 +13,8 @@ contains
 
   subroutine apply_pcd_precond(z_u, z_v, z_p, r_u, r_v, r_p, &
                                u_adv, v_adv, rho_u, rho_v, &
-                               kappa, zeta, eta, dt_step, nx, ny, nh)
+                               kappa, zeta, eta, dt_step, nx, ny, nh, &
+                               penalty_u, penalty_v)
     integer(ip), intent(in) :: nx, ny, nh
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(in)  :: z_u
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(in)  :: z_v
@@ -28,6 +29,8 @@ contains
     real(dp), dimension(1-nh:nx+nh, 1-nh:ny+nh), intent(in)  :: kappa
     real(dp), dimension(0-nh:nx+nh, 0-nh:ny+nh), intent(in)  :: zeta, eta
     real(dp), intent(in) :: dt_step
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(in) :: penalty_u
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(in) :: penalty_v
 
     real(dp), dimension(1-nh:nx+nh, 1-nh:ny+nh) :: phi_p
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh) :: z_u_work
@@ -81,7 +84,8 @@ contains
     end do
 
     ! 3. Inversion des blocs de vitesse
-    call solve_helmholtz_v(r_v, z_v_work, rho_v, kappa, zeta, eta, dt_step, nx, ny, nh, n_sweeps_in=3)
+    call solve_helmholtz_v(r_v, z_v_work, rho_v, kappa, zeta, eta, dt_step, nx, ny, nh, &
+                           n_sweeps_in=3, penalty_v=penalty_v)
     call mpi_exchange_halos_v(r_v, nx, ny, nh)
 
     do j = 1, ny
@@ -93,7 +97,8 @@ contains
       end do
     end do
 
-    call solve_helmholtz_u(r_u, z_u_work, rho_u, kappa, zeta, eta, dt_step, nx, ny, nh, n_sweeps_in=3)
+    call solve_helmholtz_u(r_u, z_u_work, rho_u, kappa, zeta, eta, dt_step, nx, ny, nh, &
+                           n_sweeps_in=3, penalty_u=penalty_u)
     call mpi_exchange_halos_u(r_u, nx, ny, nh)
 
   end subroutine apply_pcd_precond

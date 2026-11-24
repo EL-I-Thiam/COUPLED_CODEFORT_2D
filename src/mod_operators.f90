@@ -166,7 +166,7 @@ contains
   !    Schema centre d'ordre 2 sur maillage MAC
   ! ----------------------------------------------------------------------------
   subroutine op_advection(u_adv, v_adv, rho_c, rho_u, rho_v, u_vel, v_vel, &
-                          adv_u, adv_v, nx, ny, nh)
+                          adv_u, adv_v, nx, ny, nh, mdot_u_cons, mdot_v_cons)
     integer(ip), intent(in) :: nx, ny, nh
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(in)  :: u_adv, u_vel
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(in)  :: v_adv, v_vel
@@ -175,8 +175,11 @@ contains
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(in)  :: rho_v
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(out) :: adv_u
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(out) :: adv_v
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(in) :: mdot_u_cons
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(in) :: mdot_v_cons
 
     integer(ip) :: i, j, i_u_max, j_v_max
+    logical :: use_cons
     real(dp) :: inv_dx, inv_dy
     real(dp) :: mdot_E, mdot_W, mdot_N, mdot_S
     real(dp) :: u_E, u_W, u_N, u_S
@@ -184,6 +187,7 @@ contains
 
     inv_dx = one / dx_grid
     inv_dy = one / dy_grid
+    use_cons = present(mdot_u_cons) .and. present(mdot_v_cons)
 
     i_u_max = nx
     if (.not. periods(1) .and. coords(1) == dims(1) - 1) i_u_max = nx - 1
@@ -197,21 +201,21 @@ contains
     ! Advection de la composante u (sur volume de contrôle centré sur la face u)
     do j = 1, ny
       do i = 1, i_u_max
-        ! Flux Est au centre de la cellule (i+1, j)
-        mdot_E = rho_c(i+1, j) * half * (u_adv(i, j) + u_adv(i+1, j))
-        u_E    = half * (u_vel(i, j) + u_vel(i+1, j))
-
-        ! Flux Ouest au centre de la cellule (i, j)
-        mdot_W = rho_c(i, j) * half * (u_adv(i-1, j) + u_adv(i, j))
-        u_W    = half * (u_vel(i-1, j) + u_vel(i, j))
-
-        ! Flux Nord au sommet (i, j)
-        mdot_N = half * (rho_v(i, j) + rho_v(i+1, j)) * half * (v_adv(i, j) + v_adv(i+1, j))
-        u_N    = half * (u_vel(i, j) + u_vel(i, j+1))
-
-        ! Flux Sud au sommet (i, j-1)
-        mdot_S = half * (rho_v(i, j-1) + rho_v(i+1, j-1)) * half * (v_adv(i, j-1) + v_adv(i+1, j-1))
-        u_S    = half * (u_vel(i, j-1) + u_vel(i, j))
+        if (use_cons) then
+          mdot_E = half * (mdot_u_cons(i, j)   + mdot_u_cons(i+1, j))
+          mdot_W = half * (mdot_u_cons(i-1, j) + mdot_u_cons(i, j))
+          mdot_N = half * (mdot_v_cons(i, j)   + mdot_v_cons(i+1, j))
+          mdot_S = half * (mdot_v_cons(i, j-1) + mdot_v_cons(i+1, j-1))
+        else
+          mdot_E = rho_c(i+1, j) * half * (u_adv(i, j) + u_adv(i+1, j))
+          mdot_W = rho_c(i, j)   * half * (u_adv(i-1, j) + u_adv(i, j))
+          mdot_N = half * (rho_v(i, j) + rho_v(i+1, j)) * half * (v_adv(i, j) + v_adv(i+1, j))
+          mdot_S = half * (rho_v(i, j-1) + rho_v(i+1, j-1)) * half * (v_adv(i, j-1) + v_adv(i+1, j-1))
+        end if
+        u_E = half * (u_vel(i, j) + u_vel(i+1, j))
+        u_W = half * (u_vel(i-1, j) + u_vel(i, j))
+        u_N = half * (u_vel(i, j) + u_vel(i, j+1))
+        u_S = half * (u_vel(i, j-1) + u_vel(i, j))
 
         adv_u(i, j) = (mdot_E * u_E - mdot_W * u_W) * inv_dx + &
                       (mdot_N * u_N - mdot_S * u_S) * inv_dy
@@ -221,21 +225,21 @@ contains
     ! Advection de la composante v (sur volume de contrôle centré sur la face v)
     do j = 1, j_v_max
       do i = 1, nx
-        ! Flux Est au sommet (i, j)
-        mdot_E = half * (rho_u(i, j) + rho_u(i, j+1)) * half * (u_adv(i, j) + u_adv(i, j+1))
-        v_E    = half * (v_vel(i, j) + v_vel(i+1, j))
-
-        ! Flux Ouest au sommet (i-1, j)
-        mdot_W = half * (rho_u(i-1, j) + rho_u(i-1, j+1)) * half * (u_adv(i-1, j) + u_adv(i-1, j+1))
-        v_W    = half * (v_vel(i-1, j) + v_vel(i, j))
-
-        ! Flux Nord au centre de la cellule (i, j+1)
-        mdot_N = rho_c(i, j+1) * half * (v_adv(i, j) + v_adv(i, j+1))
-        v_N    = half * (v_vel(i, j) + v_vel(i, j+1))
-
-        ! Flux Sud au centre de la cellule (i, j)
-        mdot_S = rho_c(i, j) * half * (v_adv(i, j-1) + v_adv(i, j))
-        v_S    = half * (v_vel(i, j-1) + v_vel(i, j))
+        if (use_cons) then
+          mdot_E = half * (mdot_u_cons(i, j)   + mdot_u_cons(i, j+1))
+          mdot_W = half * (mdot_u_cons(i-1, j) + mdot_u_cons(i-1, j+1))
+          mdot_N = half * (mdot_v_cons(i, j)   + mdot_v_cons(i, j+1))
+          mdot_S = half * (mdot_v_cons(i, j-1) + mdot_v_cons(i, j))
+        else
+          mdot_E = half * (rho_u(i, j) + rho_u(i, j+1)) * half * (u_adv(i, j) + u_adv(i, j+1))
+          mdot_W = half * (rho_u(i-1, j) + rho_u(i-1, j+1)) * half * (u_adv(i-1, j) + u_adv(i-1, j+1))
+          mdot_N = rho_c(i, j+1) * half * (v_adv(i, j) + v_adv(i, j+1))
+          mdot_S = rho_c(i, j)   * half * (v_adv(i, j-1) + v_adv(i, j))
+        end if
+        v_E = half * (v_vel(i, j) + v_vel(i+1, j))
+        v_W = half * (v_vel(i-1, j) + v_vel(i, j))
+        v_N = half * (v_vel(i, j) + v_vel(i, j+1))
+        v_S = half * (v_vel(i, j-1) + v_vel(i, j))
 
         adv_v(i, j) = (mdot_E * v_E - mdot_W * v_W) * inv_dx + &
                       (mdot_N * v_N - mdot_S * v_S) * inv_dy
@@ -336,7 +340,9 @@ contains
   ! ----------------------------------------------------------------------------
   subroutine matvec_coupled(X_u, X_v, X_p, Y_u, Y_v, Y_p, &
                             u_adv, v_adv, rho_c, rho_u, rho_v, &
-                            kappa, zeta, eta, dt_step, nx, ny, nh, include_advection)
+                            kappa, zeta, eta, dt_step, nx, ny, nh, &
+                            include_advection, penalty_u, penalty_v, &
+                            mdot_u_cons, mdot_v_cons)
     integer(ip), intent(in) :: nx, ny, nh
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(inout) :: X_u
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(inout) :: X_v
@@ -353,14 +359,21 @@ contains
     real(dp), dimension(0-nh:nx+nh, 0-nh:ny+nh), intent(in)    :: zeta, eta
     real(dp), intent(in) :: dt_step
     logical, optional, intent(in) :: include_advection
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(in) :: penalty_u
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(in) :: penalty_v
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(in) :: mdot_u_cons
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(in) :: mdot_v_cons
 
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh) :: visc_u, adv_u, grad_p_u
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh) :: visc_v, adv_v, grad_p_v
-    logical :: with_adv
+    logical :: with_adv, has_pen_u, has_pen_v, has_cons
     integer(ip) :: i, j, i_u_max, j_v_max
 
     with_adv = .true.
     if (present(include_advection)) with_adv = include_advection
+    has_pen_u = present(penalty_u)
+    has_pen_v = present(penalty_v)
+    has_cons  = present(mdot_u_cons) .and. present(mdot_v_cons)
 
     i_u_max = nx
     if (.not. periods(1) .and. coords(1) == dims(1) - 1) i_u_max = nx - 1
@@ -379,21 +392,27 @@ contains
     ! c) Calcul du gradient de pression B_p^T * X_p
     call op_grad_pressure(X_p, grad_p_u, grad_p_v, nx, ny, nh)
 
-    ! d) Calcul convectif si active
+    ! d) Calcul convectif si active (standard ou consistant AMP)
     if (with_adv) then
-      call op_advection(u_adv, v_adv, rho_c, rho_u, rho_v, X_u, X_v, adv_u, adv_v, nx, ny, nh)
+      if (has_cons) then
+        call op_advection(u_adv, v_adv, rho_c, rho_u, rho_v, X_u, X_v, adv_u, adv_v, nx, ny, nh, &
+                          mdot_u_cons=mdot_u_cons, mdot_v_cons=mdot_v_cons)
+      else
+        call op_advection(u_adv, v_adv, rho_c, rho_u, rho_v, X_u, X_v, adv_u, adv_v, nx, ny, nh)
+      end if
     else
       adv_u = zero
       adv_v = zero
     end if
 
     ! e) Assemblage du bloc de quantite de mouvement en u
-    !    Y_u = (rho_u / dt) * X_u + Adv_u - div(T)_u + Grad_x(X_p)
+    !    Y_u = (rho_u / dt + pen_u) * X_u + Adv_u - div(T)_u + Grad_x(X_p)
     Y_u = zero
     do j = 1, ny
       do i = 1, i_u_max
         Y_u(i, j) = (rho_u(i, j) / dt_step) * X_u(i, j) + adv_u(i, j) + &
                     visc_u(i, j) + grad_p_u(i, j)
+        if (has_pen_u) Y_u(i, j) = Y_u(i, j) + penalty_u(i, j) * X_u(i, j)
       end do
       if (.not. periods(1)) then
         if (coords(1) == 0) Y_u(0, j) = X_u(0, j)
@@ -402,12 +421,13 @@ contains
     end do
 
     ! f) Assemblage du bloc de quantite de mouvement en v
-    !    Y_v = (rho_v / dt) * X_v + Adv_v - div(T)_v + Grad_y(X_p)
+    !    Y_v = (rho_v / dt + pen_v) * X_v + Adv_v - div(T)_v + Grad_y(X_p)
     Y_v = zero
     do j = 1, j_v_max
       do i = 1, nx
         Y_v(i, j) = (rho_v(i, j) / dt_step) * X_v(i, j) + adv_v(i, j) + &
                     visc_v(i, j) + grad_p_v(i, j)
+        if (has_pen_v) Y_v(i, j) = Y_v(i, j) + penalty_v(i, j) * X_v(i, j)
       end do
     end do
     if (.not. periods(2)) then

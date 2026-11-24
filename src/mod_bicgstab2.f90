@@ -77,7 +77,8 @@ contains
   subroutine bicgstab_solve(X_u, X_v, X_p, B_u, B_v, B_p, &
                             u_adv, v_adv, rho_c, rho_u, rho_v, &
                             kappa, zeta, eta, dt_step, nx, ny, nh, &
-                            tol_in, max_iter_in, iter_out, res_out, u_top_lid)
+                            tol_in, max_iter_in, iter_out, res_out, u_top_lid, &
+                            penalty_u, penalty_v, mdot_u_cons, mdot_v_cons)
     integer(ip), intent(in) :: nx, ny, nh
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(inout) :: X_u
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(inout) :: X_v
@@ -98,6 +99,10 @@ contains
     integer(ip), optional, intent(out) :: iter_out
     real(dp), optional, intent(out)    :: res_out
     real(dp), optional, intent(in)     :: u_top_lid
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(in) :: penalty_u
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(in) :: penalty_v
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(in) :: mdot_u_cons
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(in) :: mdot_v_cons
 
     real(dp), allocatable :: b_hat_u(:,:), b_hat_v(:,:), b_hat_p(:,:)
     real(dp), allocatable :: r_u(:,:), r_v(:,:), r_p(:,:)
@@ -136,7 +141,8 @@ contains
     ! b_hat = P^(-1) * b
     call apply_pcd_precond(B_u, B_v, B_p, b_hat_u, b_hat_v, b_hat_p, &
                            u_adv, v_adv, rho_u, rho_v, &
-                           kappa, zeta, eta, dt_step, nx, ny, nh)
+                           kappa, zeta, eta, dt_step, nx, ny, nh, &
+                           penalty_u=penalty_u, penalty_v=penalty_v)
 
     norm_b = sqrt(coupled_dot(b_hat_u, b_hat_v, b_hat_p, b_hat_u, b_hat_v, b_hat_p, nx, ny, nh))
     if (norm_b < 1.0e-14_dp) norm_b = one
@@ -144,10 +150,13 @@ contains
     ! r^(0) = b_hat - P^(-1) * A * x^(0)
     call matvec_coupled(X_u, X_v, X_p, z_u, z_v, z_p, &
                         u_adv, v_adv, rho_c, rho_u, rho_v, &
-                        kappa, zeta, eta, dt_step, nx, ny, nh)
+                        kappa, zeta, eta, dt_step, nx, ny, nh, &
+                        penalty_u=penalty_u, penalty_v=penalty_v, &
+                        mdot_u_cons=mdot_u_cons, mdot_v_cons=mdot_v_cons)
     call apply_pcd_precond(z_u, z_v, z_p, v_u, v_v, v_p, &
                            u_adv, v_adv, rho_u, rho_v, &
-                           kappa, zeta, eta, dt_step, nx, ny, nh)
+                           kappa, zeta, eta, dt_step, nx, ny, nh, &
+                           penalty_u=penalty_u, penalty_v=penalty_v)
 
     r_u = b_hat_u - v_u
     r_v = b_hat_v - v_v
@@ -175,10 +184,13 @@ contains
       call apply_velocity_bcs(p_u, p_v, nx, ny, nh)
       call matvec_coupled(p_u, p_v, p_p, z_u, z_v, z_p, &
                           u_adv, v_adv, rho_c, rho_u, rho_v, &
-                          kappa, zeta, eta, dt_step, nx, ny, nh)
+                          kappa, zeta, eta, dt_step, nx, ny, nh, &
+                          penalty_u=penalty_u, penalty_v=penalty_v, &
+                          mdot_u_cons=mdot_u_cons, mdot_v_cons=mdot_v_cons)
       call apply_pcd_precond(z_u, z_v, z_p, v_u, v_v, v_p, &
                              u_adv, v_adv, rho_u, rho_v, &
-                             kappa, zeta, eta, dt_step, nx, ny, nh)
+                             kappa, zeta, eta, dt_step, nx, ny, nh, &
+                             penalty_u=penalty_u, penalty_v=penalty_v)
       call apply_velocity_bcs(v_u, v_v, nx, ny, nh)
 
       rv_dot = coupled_dot(r0_u, r0_v, r0_p, v_u, v_v, v_p, nx, ny, nh)
@@ -193,10 +205,13 @@ contains
       call apply_velocity_bcs(s_u, s_v, nx, ny, nh)
       call matvec_coupled(s_u, s_v, s_p, z_u, z_v, z_p, &
                           u_adv, v_adv, rho_c, rho_u, rho_v, &
-                          kappa, zeta, eta, dt_step, nx, ny, nh)
+                          kappa, zeta, eta, dt_step, nx, ny, nh, &
+                          penalty_u=penalty_u, penalty_v=penalty_v, &
+                          mdot_u_cons=mdot_u_cons, mdot_v_cons=mdot_v_cons)
       call apply_pcd_precond(z_u, z_v, z_p, t_u, t_v, t_p, &
                              u_adv, v_adv, rho_u, rho_v, &
-                             kappa, zeta, eta, dt_step, nx, ny, nh)
+                             kappa, zeta, eta, dt_step, nx, ny, nh, &
+                             penalty_u=penalty_u, penalty_v=penalty_v)
       call apply_velocity_bcs(t_u, t_v, nx, ny, nh)
 
       tt_dot = coupled_dot(t_u, t_v, t_p, t_u, t_v, t_p, nx, ny, nh)
@@ -255,7 +270,8 @@ contains
   subroutine bicgstab2_solve(X_u, X_v, X_p, B_u, B_v, B_p, &
                              u_adv, v_adv, rho_c, rho_u, rho_v, &
                              kappa, zeta, eta, dt_step, nx, ny, nh, &
-                             tol_in, max_iter_in, iter_out, res_out, u_top_lid)
+                             tol_in, max_iter_in, iter_out, res_out, u_top_lid, &
+                             penalty_u, penalty_v, mdot_u_cons, mdot_v_cons)
     integer(ip), intent(in) :: nx, ny, nh
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(inout) :: X_u
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(inout) :: X_v
@@ -276,6 +292,10 @@ contains
     integer(ip), optional, intent(out) :: iter_out
     real(dp), optional, intent(out)    :: res_out
     real(dp), optional, intent(in)     :: u_top_lid
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(in) :: penalty_u
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(in) :: penalty_v
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(in) :: mdot_u_cons
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(in) :: mdot_v_cons
 
     ! Vecteurs de travail Krylov pour le système couplé
     real(dp), allocatable :: b_hat_u(:,:), b_hat_v(:,:), b_hat_p(:,:)
@@ -319,7 +339,8 @@ contains
     ! 1. Préconditionnement à gauche du second membre : b_hat = P^(-1) * b
     call apply_pcd_precond(B_u, B_v, B_p, b_hat_u, b_hat_v, b_hat_p, &
                            u_adv, v_adv, rho_u, rho_v, &
-                           kappa, zeta, eta, dt_step, nx, ny, nh)
+                           kappa, zeta, eta, dt_step, nx, ny, nh, &
+                           penalty_u=penalty_u, penalty_v=penalty_v)
 
     norm_b = sqrt(coupled_dot(b_hat_u, b_hat_v, b_hat_p, b_hat_u, b_hat_v, b_hat_p, nx, ny, nh))
     if (norm_b < 1.0e-14_dp) norm_b = one
@@ -327,10 +348,13 @@ contains
     ! 2. Résidu initial : r^(0) = b_hat - P^(-1) * A * x^(0)
     call matvec_coupled(X_u, X_v, X_p, z_u, z_v, z_p, &
                         u_adv, v_adv, rho_c, rho_u, rho_v, &
-                        kappa, zeta, eta, dt_step, nx, ny, nh)
+                        kappa, zeta, eta, dt_step, nx, ny, nh, &
+                        penalty_u=penalty_u, penalty_v=penalty_v, &
+                        mdot_u_cons=mdot_u_cons, mdot_v_cons=mdot_v_cons)
     call apply_pcd_precond(z_u, z_v, z_p, q_u, q_v, q_p, &
                            u_adv, v_adv, rho_u, rho_v, &
-                           kappa, zeta, eta, dt_step, nx, ny, nh)
+                           kappa, zeta, eta, dt_step, nx, ny, nh, &
+                           penalty_u=penalty_u, penalty_v=penalty_v)
 
     r_u = b_hat_u - q_u
     r_v = b_hat_v - q_v
@@ -384,11 +408,14 @@ contains
       ! z = A * u
       call matvec_coupled(u_vec_u, u_vec_v, u_vec_p, z_u, z_v, z_p, &
                           u_adv, v_adv, rho_c, rho_u, rho_v, &
-                          kappa, zeta, eta, dt_step, nx, ny, nh)
+                          kappa, zeta, eta, dt_step, nx, ny, nh, &
+                          penalty_u=penalty_u, penalty_v=penalty_v, &
+                          mdot_u_cons=mdot_u_cons, mdot_v_cons=mdot_v_cons)
       ! v = P^(-1) * z
       call apply_pcd_precond(z_u, z_v, z_p, v_vec_u, v_vec_v, v_vec_p, &
                              u_adv, v_adv, rho_u, rho_v, &
-                             kappa, zeta, eta, dt_step, nx, ny, nh)
+                             kappa, zeta, eta, dt_step, nx, ny, nh, &
+                             penalty_u=penalty_u, penalty_v=penalty_v)
       call apply_velocity_bcs(v_vec_u, v_vec_v, nx, ny, nh)
 
       gamma_val = coupled_dot(r_tilde_u, r_tilde_v, r_tilde_p, v_vec_u, v_vec_v, v_vec_p, nx, ny, nh)
@@ -402,11 +429,14 @@ contains
       ! z = A * r
       call matvec_coupled(r_u, r_v, r_p, z_u, z_v, z_p, &
                           u_adv, v_adv, rho_c, rho_u, rho_v, &
-                          kappa, zeta, eta, dt_step, nx, ny, nh)
+                          kappa, zeta, eta, dt_step, nx, ny, nh, &
+                          penalty_u=penalty_u, penalty_v=penalty_v, &
+                          mdot_u_cons=mdot_u_cons, mdot_v_cons=mdot_v_cons)
       ! s = P^(-1) * z
       call apply_pcd_precond(z_u, z_v, z_p, s_vec_u, s_vec_v, s_vec_p, &
                              u_adv, v_adv, rho_u, rho_v, &
-                             kappa, zeta, eta, dt_step, nx, ny, nh)
+                             kappa, zeta, eta, dt_step, nx, ny, nh, &
+                             penalty_u=penalty_u, penalty_v=penalty_v)
       call apply_velocity_bcs(s_vec_u, s_vec_v, nx, ny, nh)
 
       X_u = X_u + alpha * u_vec_u
@@ -429,11 +459,14 @@ contains
       ! z = A * v
       call matvec_coupled(v_vec_u, v_vec_v, v_vec_p, z_u, z_v, z_p, &
                           u_adv, v_adv, rho_c, rho_u, rho_v, &
-                          kappa, zeta, eta, dt_step, nx, ny, nh)
+                          kappa, zeta, eta, dt_step, nx, ny, nh, &
+                          penalty_u=penalty_u, penalty_v=penalty_v, &
+                          mdot_u_cons=mdot_u_cons, mdot_v_cons=mdot_v_cons)
       ! w = P^(-1) * z
       call apply_pcd_precond(z_u, z_v, z_p, w_vec_u, w_vec_v, w_vec_p, &
                              u_adv, v_adv, rho_u, rho_v, &
-                             kappa, zeta, eta, dt_step, nx, ny, nh)
+                             kappa, zeta, eta, dt_step, nx, ny, nh, &
+                             penalty_u=penalty_u, penalty_v=penalty_v)
       call apply_velocity_bcs(w_vec_u, w_vec_v, nx, ny, nh)
 
       gamma_val = coupled_dot(r_tilde_u, r_tilde_v, r_tilde_p, w_vec_u, w_vec_v, w_vec_p, nx, ny, nh)
@@ -455,11 +488,14 @@ contains
       ! z = A * s
       call matvec_coupled(s_vec_u, s_vec_v, s_vec_p, z_u, z_v, z_p, &
                           u_adv, v_adv, rho_c, rho_u, rho_v, &
-                          kappa, zeta, eta, dt_step, nx, ny, nh)
+                          kappa, zeta, eta, dt_step, nx, ny, nh, &
+                          penalty_u=penalty_u, penalty_v=penalty_v, &
+                          mdot_u_cons=mdot_u_cons, mdot_v_cons=mdot_v_cons)
       ! t = P^(-1) * z
       call apply_pcd_precond(z_u, z_v, z_p, t_vec_u, t_vec_v, t_vec_p, &
                              u_adv, v_adv, rho_u, rho_v, &
-                             kappa, zeta, eta, dt_step, nx, ny, nh)
+                             kappa, zeta, eta, dt_step, nx, ny, nh, &
+                             penalty_u=penalty_u, penalty_v=penalty_v)
       call apply_velocity_bcs(t_vec_u, t_vec_v, nx, ny, nh)
 
       ! =======================================================================

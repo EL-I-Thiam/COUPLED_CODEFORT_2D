@@ -52,14 +52,22 @@ La méthodologie est directement issue des travaux du laboratoire MSME (Universi
   sudo dnf install -y gcc-gfortran openmpi openmpi-devel cmake make git
   ```
 
-### Commandes Make
-* Compiler le projet et les tests unitaires :
+### Commandes Make et exécution
+* Compiler le projet (`fugu2d` et les 8 tests unitaires/benchmarks) :
   ```bash
   make
   ```
-* Lancer le test de communication MPI cartésienne (sur 4 processus) :
+* Exécuter le solveur configurable (`input.nml`) sur 4 cœurs MPI :
   ```bash
-  make test_mpi
+  mpirun -np 4 ./bin/fugu2d
+  ```
+* Lancer l'ensemble des 8 tests de validation sur 4 processus :
+  ```bash
+  make tests
+  ```
+* Lancer un test spécifique (`test_mpi`, `test_operators`, `test_cavity`, `test_droplet`, `test_laplace`, `test_bubble`, `test_poiseuille`, `test_week6`) :
+  ```bash
+  make test_week6
   ```
 * Nettoyer les fichiers objets et modules :
   ```bash
@@ -70,9 +78,9 @@ La méthodologie est directement issue des travaux du laboratoire MSME (Universi
 
 ## 3. Feuille de route de développement hebdomadaire
 
-* **Semaine 1 (En cours) :** Socle MPI 2D, topologie cartésienne `MPI_Cart_create` et routines d'échange de halos pour scalaires, vitesses décalées et sommets.
-* **Semaine 2 :** Opérateurs discrets de quantité de mouvement, tenseur visqueux à viscosités variables, divergence et gradient de pression.
-* **Semaine 3 :** Solveur Krylov BiCGStab(2) distribué et préconditionneur par blocs PCD (Validation : Cavité entraînée de Botella & Peyret).
-* **Semaine 4 :** Transport VOF de Weymouth & Yue, lissage SVOF Helmholtz et force capillaire CSF (Validation : Goutte statique / loi de Laplace).
-* **Semaine 5 :** Couplage diphasique complet et schéma de transport consistant AMP (Validation : Poiseuille diphasique analytique).
-* **Semaine 6 :** Cas-tests raides (Bulle de Hysing, chute de cylindre dense à $\rho_1/\rho_2 = 10^5, \mu_1/\mu_2 = 10^{10}$) et sorties VTK (.vtr) pour ParaView.
+* **Semaine 1 (Terminée) :** Socle MPI 2D, topologie cartésienne `MPI_Cart_create` et routines d'échange de halos pour scalaires, vitesses décalées et sommets.
+* **Semaine 2 (Terminée) :** Opérateurs discrets de quantité de mouvement, tenseur visqueux à viscosités variables, divergence et gradient de pression.
+* **Semaine 3 (Terminée) :** Solveur Krylov BiCGStab / BiCGStab(2) distribué et préconditionneur par blocs PCD (Validation : Cavité entraînée de Botella & Peyret).
+* **Semaine 4 (Terminée) :** Transport VOF-TVD (Superbee), lissage SVOF Helmholtz et force capillaire CSF (Validation : Goutte statique / loi de Laplace).
+* **Semaine 5 (Terminée) :** Couplage diphasique complet NS + VOF + CSF et sorties VTK (`.vtk`) pour ParaView (Validation : Goutte statique couplée et bulle ascendante de Hysing Cas 1).
+* **Semaine 6 (Terminée) :** Schéma temporel BDF2 (`time_order = 2`), transport consistant masse-quantité de mouvement (AMP, Hysing Cas 2 à $\rho_1/\rho_2 = 10^3$), pénalisation de Darcy ($\alpha = 10^{12}$), Poiseuille diphasique analytique, pilote `fugu2d` (`input.nml`) et reprise binaire MPI (*checkpoint/restart*).

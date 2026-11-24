@@ -16,6 +16,8 @@ module mod_io
   private
 
   public :: write_vtk_fields
+  public :: write_checkpoint
+  public :: read_checkpoint
 
 contains
 
@@ -160,5 +162,66 @@ contains
 
     deallocate(uc_loc, vc_loc, buf_send)
   end subroutine write_vtk_fields
+
+  ! ----------------------------------------------------------------------------
+  ! Sauvegarde binaire par rang MPI (Checkpoint / Reprise exacte bit-a-bit)
+  ! ----------------------------------------------------------------------------
+  subroutine write_checkpoint(prefix, step, t_curr, u_vel, v_vel, u_prev, v_prev, &
+                              p_field, c_field, nx, ny, nh)
+    character(len=*), intent(in) :: prefix
+    integer(ip), intent(in) :: step, nx, ny, nh
+    real(dp), intent(in) :: t_curr
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(in) :: u_vel, u_prev
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(in) :: v_vel, v_prev
+    real(dp), dimension(1-nh:nx+nh, 1-nh:ny+nh), intent(in) :: p_field, c_field
+
+    character(len=256) :: fname
+    integer(ip) :: unit_chk
+
+    write(fname, '(A,A,I4.4,A)') trim(prefix), '_r', my_rank, '.bin'
+    open(newunit=unit_chk, file=trim(fname), form='unformatted', access='stream', &
+         status='replace', action='write')
+    write(unit_chk) step, t_curr, nx, ny, nh
+    write(unit_chk) u_vel, v_vel, u_prev, v_prev, p_field, c_field
+    close(unit_chk)
+  end subroutine write_checkpoint
+
+  ! ----------------------------------------------------------------------------
+  ! Lecture binaire par rang MPI pour reprise de calcul
+  ! ----------------------------------------------------------------------------
+  subroutine read_checkpoint(prefix, step, t_curr, u_vel, v_vel, u_prev, v_prev, &
+                             p_field, c_field, nx, ny, nh, ok)
+    character(len=*), intent(in) :: prefix
+    integer(ip), intent(out) :: step
+    real(dp), intent(out) :: t_curr
+    integer(ip), intent(in) :: nx, ny, nh
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(out) :: u_vel, u_prev
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(out) :: v_vel, v_prev
+    real(dp), dimension(1-nh:nx+nh, 1-nh:ny+nh), intent(out) :: p_field, c_field
+    logical, intent(out) :: ok
+
+    character(len=256) :: fname
+    integer(ip) :: unit_chk, nx_f, ny_f, nh_f
+    logical :: exists_f
+
+    write(fname, '(A,A,I4.4,A)') trim(prefix), '_r', my_rank, '.bin'
+    inquire(file=trim(fname), exist=exists_f)
+    if (.not. exists_f) then
+      ok = .false.
+      return
+    end if
+
+    open(newunit=unit_chk, file=trim(fname), form='unformatted', access='stream', &
+         status='old', action='read')
+    read(unit_chk) step, t_curr, nx_f, ny_f, nh_f
+    if (nx_f /= nx .or. ny_f /= ny .or. nh_f /= nh) then
+      close(unit_chk)
+      ok = .false.
+      return
+    end if
+    read(unit_chk) u_vel, v_vel, u_prev, v_prev, p_field, c_field
+    close(unit_chk)
+    ok = .true.
+  end subroutine read_checkpoint
 
 end module mod_io

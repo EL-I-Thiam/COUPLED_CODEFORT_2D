@@ -36,12 +36,15 @@ OBJS     := $(patsubst $(SRC_DIR)/%.f90,$(OBJ_DIR)/%.o,$(SRCS))
 
 # Cibles principales
 all: directories \
+     $(BIN_DIR)/fugu2d \
      $(BIN_DIR)/test_halo_exchange \
      $(BIN_DIR)/test_operators \
      $(BIN_DIR)/test_lid_driven_cavity \
      $(BIN_DIR)/test_static_droplet \
      $(BIN_DIR)/test_laplace_coupled \
-     $(BIN_DIR)/test_rising_bubble
+     $(BIN_DIR)/test_rising_bubble \
+     $(BIN_DIR)/test_poiseuille_twophase \
+     $(BIN_DIR)/test_week6_advanced
 
 directories:
 	@mkdir -p $(OBJ_DIR) $(MOD_DIR) $(BIN_DIR)
@@ -87,6 +90,10 @@ $(OBJ_DIR)/mod_solver_coupled.o: $(SRC_DIR)/mod_solver_coupled.f90 \
                                  $(OBJ_DIR)/mod_bicgstab2.o | directories
 	$(FC) $(FFLAGS) -c $< -o $@
 
+# Exécutable principal piloté par input.nml
+$(BIN_DIR)/fugu2d: $(SRC_DIR)/main.f90 $(OBJS) | directories
+	$(FC) $(FFLAGS) $< $(OBJS) -o $@
+
 # Exécutables de tests
 $(BIN_DIR)/test_halo_exchange: $(TEST_DIR)/test_halo_exchange.f90 $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o | directories
 	$(FC) $(FFLAGS) $< $(OBJ_DIR)/mod_precision.o $(OBJ_DIR)/mod_params.o $(OBJ_DIR)/mod_mpi.o -o $@
@@ -104,6 +111,12 @@ $(BIN_DIR)/test_laplace_coupled: $(TEST_DIR)/test_laplace_coupled.f90 $(OBJS) | 
 	$(FC) $(FFLAGS) $< $(OBJS) -o $@
 
 $(BIN_DIR)/test_rising_bubble: $(TEST_DIR)/test_rising_bubble.f90 $(OBJS) | directories
+	$(FC) $(FFLAGS) $< $(OBJS) -o $@
+
+$(BIN_DIR)/test_poiseuille_twophase: $(TEST_DIR)/test_poiseuille_twophase.f90 $(OBJS) | directories
+	$(FC) $(FFLAGS) $< $(OBJS) -o $@
+
+$(BIN_DIR)/test_week6_advanced: $(TEST_DIR)/test_week6_advanced.f90 $(OBJS) | directories
 	$(FC) $(FFLAGS) $< $(OBJS) -o $@
 
 # Exécution des tests unitaires
@@ -131,9 +144,17 @@ test_bubble: $(BIN_DIR)/test_rising_bubble
 	@echo "Lancement du benchmark bulle ascendante 2D sur 4 cœurs..."
 	$(MPIRUN) -np 4 ./$(BIN_DIR)/test_rising_bubble
 
-tests: test_mpi test_operators test_cavity test_droplet test_laplace test_bubble
+test_poiseuille: $(BIN_DIR)/test_poiseuille_twophase
+	@echo "Lancement du benchmark Poiseuille diphasique analytique sur 4 cœurs..."
+	$(MPIRUN) -np 4 ./$(BIN_DIR)/test_poiseuille_twophase
+
+test_week6: $(BIN_DIR)/test_week6_advanced
+	@echo "Lancement des tests avancés Semaine 6 (Darcy, BDF2, AMP, Checkpoint) sur 4 cœurs..."
+	$(MPIRUN) -np 4 ./$(BIN_DIR)/test_week6_advanced
+
+tests: test_mpi test_operators test_cavity test_droplet test_laplace test_bubble test_poiseuille test_week6
 
 clean:
 	rm -rf $(OBJ_DIR) $(MOD_DIR) $(BIN_DIR) output
 
-.PHONY: all directories test_mpi test_operators test_cavity test_droplet test_laplace test_bubble tests clean
+.PHONY: all directories test_mpi test_operators test_cavity test_droplet test_laplace test_bubble test_poiseuille test_week6 tests clean

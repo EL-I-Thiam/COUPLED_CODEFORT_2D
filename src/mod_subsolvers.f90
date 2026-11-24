@@ -250,7 +250,7 @@ contains
   !    Par Jacobi amorti (relaxation sous-relaxée pour assurer la contraction)
   ! ----------------------------------------------------------------------------
   subroutine solve_helmholtz_u(u_sol, rhs_u, rho_u, kappa, zeta, eta, dt_step, &
-                               nx, ny, nh, n_sweeps_in)
+                               nx, ny, nh, n_sweeps_in, penalty_u)
     integer(ip), intent(in) :: nx, ny, nh
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(inout) :: u_sol
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(in)    :: rhs_u
@@ -259,6 +259,7 @@ contains
     real(dp), dimension(0-nh:nx+nh, 0-nh:ny+nh), intent(in)    :: zeta, eta
     real(dp), intent(in) :: dt_step
     integer(ip), optional, intent(in) :: n_sweeps_in
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(in) :: penalty_u
 
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh) :: u_old
     real(dp) :: inv_dx2, inv_dy2, diag_val, off_diag
@@ -289,6 +290,7 @@ contains
           c_S = (zeta(i, j-1) - eta(i, j-1)) * inv_dy2
 
           diag_val = (rho_u(i, j) / dt_step) + c_E + c_W + c_N + c_S
+          if (present(penalty_u)) diag_val = diag_val + penalty_u(i, j)
           off_diag = c_E * u_old(i+1, j) + c_W * u_old(i-1, j) + &
                      c_N * u_old(i, j+1) + c_S * u_old(i, j-1)
 
@@ -310,7 +312,7 @@ contains
   ! 3. Solveur / Lisseur scalaire pour le bloc de vitesse V : F_vv v = rhs
   ! ----------------------------------------------------------------------------
   subroutine solve_helmholtz_v(v_sol, rhs_v, rho_v, kappa, zeta, eta, dt_step, &
-                               nx, ny, nh, n_sweeps_in)
+                               nx, ny, nh, n_sweeps_in, penalty_v)
     integer(ip), intent(in) :: nx, ny, nh
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(inout) :: v_sol
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(in)    :: rhs_v
@@ -319,6 +321,7 @@ contains
     real(dp), dimension(0-nh:nx+nh, 0-nh:ny+nh), intent(in)    :: zeta, eta
     real(dp), intent(in) :: dt_step
     integer(ip), optional, intent(in) :: n_sweeps_in
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(in) :: penalty_v
 
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh) :: v_old
     real(dp) :: inv_dx2, inv_dy2, diag_val, off_diag
@@ -348,6 +351,7 @@ contains
           c_S = kappa(i, j)   * inv_dy2
 
           diag_val = (rho_v(i, j) / dt_step) + c_E + c_W + c_N + c_S
+          if (present(penalty_v)) diag_val = diag_val + penalty_v(i, j)
           off_diag = c_E * v_old(i+1, j) + c_W * v_old(i-1, j) + &
                      c_N * v_old(i, j+1) + c_S * v_old(i, j-1)
 

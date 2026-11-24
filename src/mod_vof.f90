@@ -35,13 +35,16 @@ contains
   ! ----------------------------------------------------------------------------
   ! 1. Advection conservative 2D de la fraction volumique C avec limiteur TVD
   ! ----------------------------------------------------------------------------
-  subroutine vof_advection_tvd(C_in, C_out, u_vel, v_vel, dt_step, nx, ny, nh)
+  subroutine vof_advection_tvd(C_in, C_out, u_vel, v_vel, dt_step, nx, ny, nh, &
+                               flux_x_out, flux_y_out)
     integer(ip), intent(in) :: nx, ny, nh
     real(dp), dimension(1-nh:nx+nh, 1-nh:ny+nh), intent(in)  :: C_in
     real(dp), dimension(1-nh:nx+nh, 1-nh:ny+nh), intent(out) :: C_out
     real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), intent(in)  :: u_vel
     real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), intent(in)  :: v_vel
     real(dp), intent(in) :: dt_step
+    real(dp), dimension(0-nh:nx+nh, 1-nh:ny+nh), optional, intent(out) :: flux_x_out
+    real(dp), dimension(1-nh:nx+nh, 0-nh:ny+nh), optional, intent(out) :: flux_y_out
 
     real(dp), dimension(0:nx, 1:ny) :: Flux_x
     real(dp), dimension(1:nx, 0:ny) :: Flux_y
@@ -121,6 +124,17 @@ contains
         C_out(i, j) = max(zero, min(one, C_out(i, j)))
       end do
     end do
+
+    if (present(flux_x_out)) then
+      flux_x_out = zero
+      flux_x_out(0:nx, 1:ny) = Flux_x(0:nx, 1:ny)
+      call mpi_exchange_halos_u(flux_x_out, nx, ny, nh)
+    end if
+    if (present(flux_y_out)) then
+      flux_y_out = zero
+      flux_y_out(1:nx, 0:ny) = Flux_y(1:nx, 0:ny)
+      call mpi_exchange_halos_v(flux_y_out, nx, ny, nh)
+    end if
 
     call mpi_exchange_halos_scalar(C_out, nx, ny, nh)
   end subroutine vof_advection_tvd
